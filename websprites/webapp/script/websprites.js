@@ -49,7 +49,7 @@ function testDraw(canvas) {
 	var boxShape = display.createShape();
 	box(boxShape);
 	
-	var builder = new RegionBuilder();
+	var builder = display.createRegionBuilder();
 	builder.beginPath();
 	builder.moveTo(0, -8);
 	builder.lineTo(8, 0);
@@ -135,6 +135,10 @@ Display.prototype = {
 		return result;
 	},
 
+	createRegionBuilder: function() {
+		return new RegionBuilder();
+	},
+	
 	createShape: function() {
 		return new Shape();
 	},
