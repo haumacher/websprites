@@ -1272,7 +1272,6 @@ function RegionBuilder() {
 	this.areas = [];
 	
 	this.start = new Coordinate(0, 0);
-	this.cursor = new Coordinate(0, 0);
 	this.closed = true;
 }
 
@@ -1292,25 +1291,22 @@ RegionBuilder.prototype = {
 		var area;
 		if (this.closed) {
 			this.closed = false;
-			area = new Area(this.start.copy());
+			area = new Area();
 			this.areas.push(area);
-			this.cursor.setCoordinate(this.start);
+			area.add(this.start);
 		} else {
 			area = this.currentArea();
 		}
 		
 		var vector = new Coordinate(x, y);
-		vector.subCoordinate(this.cursor);
 		area.add(vector);
-
-		this.cursor.set(x, y);
 	},
 	
 	closePath: function() {
 		if (this.closed) {
 			return;
 		}
-		this.lineTo(this.start.x, this.start.y);
+		this.currentArea().close();
 		this.closed = true;
 	},
 	
@@ -1335,42 +1331,48 @@ function Region(areas) {
 Region.prototype = {
 	containsCoordinate: function(x, y) {
 		for (var n = 0, cnt = this.areas.length; n < cnt; n++) {
-			if (!(this.areas[n].containsCoordinate(x, y))) {
-				return false;
+			var area = this.areas[n];
+			if (area.containsCoordinate(x, y)) {
+				return true;
 			}
 		}
-		return true;
+		return false;
 	}
 }
 
-function Area(start) {
-	this.start = start;
-	this.vectors = [];
+function Area() {
+	this.corners = [];
 }
 
 Area.prototype = {
-	add: function(vector) {
-		if (vector.getLength() > 0.1) {
-			this.vectors.push(vector);
-		}
+	add: function(corner) {
+		this.corners.push(corner);
+	},
+	
+	close: function() {
+		this.corners.push(this.corners[0]);
 	},
 	
 	containsCoordinate: function(x, y) {
-		var test = new Coordinate(x, y);
-		
-		var current = this.start.copy();
-		for (var n = 0, cnt = this.vectors.length; n < cnt; n++) {
-			var vector = this.vectors[n];
+		var base = this.corners[0];
+		var vectorCorner = new Coordinate(0, 0);
+		var vectorTest = new Coordinate(0, 0);
+		for (var n = 1, cnt = this.corners.length; n < cnt; n++) {
+			var corner = this.corners[n];
 			
-			test.subCoordinate(current);
-			test.rot90();
-			var direction = vector.scalarProduct(test);
+			vectorTest.set(x, y);
+			vectorTest.subCoordinate(base);
+			vectorTest.rot90();
+			
+			vectorCorner.setCoordinate(corner);
+			vectorCorner.subCoordinate(base);
+			
+			var direction = vectorCorner.scalarProduct(vectorTest);
 			if (direction > 0) {
 				return false;
 			}
 			
-			current.addCoordinate(vector);
-			test.set(x, y);
+			base = corner;
 		}
 		return true;
 	}
