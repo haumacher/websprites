@@ -29,7 +29,6 @@ function testDraw(canvas) {
 	
 	var bar = display.createShape();
 	bar.activeRotation(a);
-	
 	bar.beginPath();
 	bar.moveTo(0, -5);
 	bar.lineTo(d, -5);
@@ -37,6 +36,19 @@ function testDraw(canvas) {
 	bar.lineTo(0, 5);
 	bar.closePath();
 	bar.stroke();
+	
+	var boxTransform = display.createActiveTransform();
+	boxTransform.rotate(a);
+	
+	var boxBuilder = display.createRegionBuilder();
+	boxBuilder.setTransform(boxTransform);
+	boxBuilder.beginPath();
+	boxBuilder.moveTo(0, -5);
+	boxBuilder.lineTo(d, -5);
+	boxBuilder.lineTo(d, 5);
+	boxBuilder.lineTo(0, 5);
+	boxBuilder.closePath();
+	var boxRegion = boxBuilder.getRegion();
 	
 	display.createSprite(p1, bar);
 	p1.moveTo(100,100);
@@ -80,6 +92,8 @@ function testDraw(canvas) {
 	display.createSprite(p4, boxShape);
 	display.createHandle(p4, region);
 	
+	display.createHandle(p1, boxRegion);
+
 	display.update();
 }
 
@@ -136,7 +150,7 @@ Display.prototype = {
 	},
 
 	createRegionBuilder: function() {
-		return new RegionBuilder();
+		return new RegionBuilder(this);
 	},
 	
 	createShape: function() {
@@ -145,6 +159,18 @@ Display.prototype = {
 	
 	createPoint: function() {
 		return new Point(this.createId());
+	},
+	
+	createCoordinate: function(x, y) {
+		if (Util.isNumber(x) && Util.isNumber(y)) {
+			return new Coordinate(x, y);
+		} else {
+			return this.createPointFromScalars(x, y);
+		}
+	},
+	
+	createActiveTransform: function() {
+		return new ActiveTransform(this.createId());
 	},
 	
 	createDirection: function(p1, p2) {
@@ -161,6 +187,10 @@ Display.prototype = {
 	
 	createPointOnLine: function(line) {
 		return new PointOnLine(this.createId(), line);
+	},
+	
+	createPointFromScalars: function(x, y) {
+		return new PointFromScalars(this.createId(), x, y);
 	},
 	
 	createDistance: function(p1, p2) {
@@ -337,11 +367,10 @@ Shape.prototype = {
 	
 	moveTo: function(x, y) {
 		if (this.addObservable(x) | this.addObservable(y)) {
-			var self = this;
 			this.add(
 				function(context, box) {
-					var xValue = self.valueScalar(x);
-					var yValue = self.valueScalar(y);
+					var xValue = Util.valueScalar(x);
+					var yValue = Util.valueScalar(y);
 					context.moveTo(xValue, yValue); 
 					box.addPoint(xValue, yValue);
 				}
@@ -358,11 +387,10 @@ Shape.prototype = {
 
 	lineTo: function(x, y) {
 		if (this.addObservable(x) | this.addObservable(y)) {
-			var self = this;
 			this.add(
 				function(context, box) {
-					var xValue = self.valueScalar(x);
-					var yValue = self.valueScalar(y);
+					var xValue = Util.valueScalar(x);
+					var yValue = Util.valueScalar(y);
 					context.lineTo(xValue, yValue); 
 					box.addPoint(xValue, yValue);
 				}
@@ -380,13 +408,12 @@ Shape.prototype = {
 	rect: function(x, y, w, h) {
 		if (this.addObservable(x) | this.addObservable(y) |
 			this.addObservable(w) | this.addObservable(h)) {
-			var self = this;
 			this.add(
 				function(context, box) {
-					var xValue = self.valueScalar(x);
-					var yValue = self.valueScalar(y);
-					var wValue = self.valueScalar(w);
-					var hValue = self.valueScalar(h);
+					var xValue = Util.valueScalar(x);
+					var yValue = Util.valueScalar(y);
+					var wValue = Util.valueScalar(w);
+					var hValue = Util.valueScalar(h);
 					context.rect(xValue, yValue, wValue, hValue); 
 					box.addPoint(xValue, yValue); 
 					box.addPoint(xValue + wValue, yValue + hValue);
@@ -411,14 +438,6 @@ Shape.prototype = {
 		this.observableById[observable.id] = observable;
 		this.observables.push(observable);
 		return true;
-	},
-	
-	valueScalar: function(scalar) {
-		if (typeof(scalar) == "number") {
-			return scalar;
-		} else {
-			return scalar.getValue();
-		}
 	},
 	
 	transform: function(a, b, c, d, e, f) {
@@ -792,6 +811,14 @@ Coordinate.prototype = {
 		this.y -= coordinate.y;
 	},
 	
+	getX: function() {
+		return this.x;
+	},
+	
+	getY: function() {
+		return this.y;
+	},
+	
 	setX: function(x) {
 		this.x = x;
 	},
@@ -944,8 +971,12 @@ Point.prototype = {
 	},
 	
 	moveToCoordinate: function(value) {
-		this.value = value;
+		this.updateValue(value);
 		this.invalidate();
+	},
+	
+	updateValue: function(value) {
+		this.value = value;
 	}
 }
 
@@ -1001,6 +1032,41 @@ PointOnLine.prototype = {
 }
 
 extend(PointOnLine, Point);
+
+function PointFromScalars(id, x, y) {
+	Point.call(this, id);
+	
+	this.x = x;
+	this.y = y;
+
+	this.listenTo(x);
+	this.listenTo(y);
+}
+
+PointFromScalars.prototype = {
+	listenTo: function(scalar) {
+		if (typeof(scalar) == "number") {
+			return;
+		}
+		scalar.addListener(this);
+	},
+	
+	adapt: function(coordinate) {
+		coordinate.x = this.adaptValue(this.x, coordinate.x);
+		coordinate.y = this.adaptValue(this.y, coordinate.y);
+	},
+	
+	adaptValue: function(scalar, value) {
+		if (typeof(scalar) == "number") {
+			return scalar;
+		} else {
+			return scalar.getValue();
+		}
+	}
+	
+}
+
+extend(PointFromScalars, Point);
 
 function DependentValue(id, dependencies) {
 	AbstractObservable.call(this);
@@ -1229,6 +1295,10 @@ function Transform(a, b, c, d, e, f) {
 }
 
 Transform.prototype = {
+	getValue: function() {
+		return this;
+	},
+	
 	set: function(a, b, c, d, e, f) {
 		this.a = a;
 		this.b = b;
@@ -1244,7 +1314,7 @@ Transform.prototype = {
 	
 	transformCoordinate: function(p) {
 		var x = this.transformX(p.x, p.y);
-		var y = this.transformXY(p.x, p.y);
+		var y = this.transformY(p.x, p.y);
 		return new Coordinate(x, y);
 	},
 	
@@ -1273,14 +1343,72 @@ Transform.prototype = {
 	
 }
 
-function RegionBuilder() {
+IDENTITY_TRANSFORM = new Transform(1, 0, 0, 1, 0, 0);
+
+function ActiveTransform(id) {
+	AbstractDependency.call(this, id);
+	
+	this.transforms = [];
+}
+
+ActiveTransform.prototype = {
+	translate: function(x, y) {
+		this.listenTo(x);
+		this.listenTo(y);
+		this.add(function(transform) {
+			var xValue = Util.valueScalar(x);
+			var yValue = Util.valueScalar(y);
+			transform.apply(1, 0, 0, 1, xValue, yValue); 
+		});
+	},
+	
+	rotate: function(angle) {
+		this.listenTo(angle);
+		this.add(function(transform) {
+			var alpha = Util.valueScalar(angle);
+			var cos = Math.cos(alpha);
+			var sin = Math.sin(alpha);
+			transform.apply(cos, sin, -sin, cos, 0, 0); 
+		});
+	},
+	
+	add: function(tranformFunction) {
+		this.transforms.push(tranformFunction);
+	},
+	
+	listenTo: function(observable) {
+		if (typeof(observable) == "number") {
+			return;
+		}
+		observable.addListener(this);
+	},
+	
+	update: function() {
+		var value = new Transform(1, 0, 0, 1, 0, 0);
+		for (var n = 0, cnt = this.transforms.length; n < cnt; n++) {
+			var transform = this.transforms[n];
+			transform(value);
+		}
+		this.value = value;
+	}
+}
+
+extend(ActiveTransform, AbstractDependency);
+
+function RegionBuilder(display) {
+	this.display = display;
 	this.areas = [];
 	
+	this.transform = IDENTITY_TRANSFORM;
 	this.start = null;
 	this.closed = true;
 }
 
 RegionBuilder.prototype = {
+	setTransform: function(transform) {
+		this.transform = transform;
+	},
+	
 	beginPath: function() {
 		if (!this.closed) {
 			this.closePath();
@@ -1288,7 +1416,7 @@ RegionBuilder.prototype = {
 	},
 	
 	moveTo: function(x, y) {
-		this.moveToCoordinate(new Coordinate(x, y));
+		this.moveToCoordinate(this.display.createCoordinate(x, y));
 	},
 	
 	moveToCoordinate: function(coordinate) {
@@ -1297,14 +1425,14 @@ RegionBuilder.prototype = {
 	},
 	
 	lineTo: function(x, y) {
-		this.lineToCoordinate(new Coordinate(x, y));
+		this.lineToCoordinate(this.display.createCoordinate(x, y));
 	},
 	
 	lineToCoordinate: function(coordinate) {
 		var area;
 		if (this.closed) {
 			this.closed = false;
-			area = new Area();
+			area = new Area(this.transform);
 			this.areas.push(area);
 			area.add(this.start);
 		} else {
@@ -1352,7 +1480,8 @@ Region.prototype = {
 	}
 }
 
-function Area() {
+function Area(transform) {
+	this.transform = transform;
 	this.corners = [];
 }
 
@@ -1366,11 +1495,13 @@ Area.prototype = {
 	},
 	
 	containsCoordinate: function(x, y) {
-		var base = this.corners[0].getValue();
+		var transform = this.transform.getValue();
+		
+		var base = this.getCorner(transform, 0);
 		var vectorCorner = new Coordinate(0, 0);
 		var vectorTest = new Coordinate(0, 0);
 		for (var n = 1, cnt = this.corners.length; n < cnt; n++) {
-			var corner = this.corners[n].getValue();
+			var corner = this.getCorner(transform, n);
 			
 			vectorTest.set(x, y);
 			vectorTest.subCoordinate(base);
@@ -1387,11 +1518,31 @@ Area.prototype = {
 			base = corner;
 		}
 		return true;
+	},
+	
+	getCorner: function(transform, n) {
+		return transform.transformCoordinate(this.corners[n].getValue());
 	}
 
 }
 
 Util = {
+	isNumber: function(scalar) {
+		if (typeof(scalar) == "number") {
+			return true;
+		} else {
+			return false;
+		}
+	},
+	
+	valueScalar: function(scalar) {
+		if (typeof(scalar) == "number") {
+			return scalar;
+		} else {
+			return scalar.getValue();
+		}
+	},
+	
 	clipRect: function(context, rect) {
 		context.beginPath();
 		var x1 = rect.x1;
