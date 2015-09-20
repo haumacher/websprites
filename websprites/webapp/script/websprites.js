@@ -748,6 +748,11 @@ function Coordinate(x, y) {
 }
 
 Coordinate.prototype = {
+	
+	getValue: function() {
+		return this;
+	},
+	
 	set: function(x, y) {
 		this.x = x;
 		this.y = y;
@@ -1271,7 +1276,7 @@ Transform.prototype = {
 function RegionBuilder() {
 	this.areas = [];
 	
-	this.start = new Coordinate(0, 0);
+	this.start = null;
 	this.closed = true;
 }
 
@@ -1283,11 +1288,19 @@ RegionBuilder.prototype = {
 	},
 	
 	moveTo: function(x, y) {
+		this.moveToCoordinate(new Coordinate(x, y));
+	},
+	
+	moveToCoordinate: function(coordinate) {
 		this.beginPath();
-		this.start.set(x, y);
+		this.start = coordinate;
 	},
 	
 	lineTo: function(x, y) {
+		this.lineToCoordinate(new Coordinate(x, y));
+	},
+	
+	lineToCoordinate: function(coordinate) {
 		var area;
 		if (this.closed) {
 			this.closed = false;
@@ -1298,8 +1311,7 @@ RegionBuilder.prototype = {
 			area = this.currentArea();
 		}
 		
-		var vector = new Coordinate(x, y);
-		area.add(vector);
+		area.add(coordinate);
 	},
 	
 	closePath: function() {
@@ -1354,11 +1366,11 @@ Area.prototype = {
 	},
 	
 	containsCoordinate: function(x, y) {
-		var base = this.corners[0];
+		var base = this.corners[0].getValue();
 		var vectorCorner = new Coordinate(0, 0);
 		var vectorTest = new Coordinate(0, 0);
 		for (var n = 1, cnt = this.corners.length; n < cnt; n++) {
-			var corner = this.corners[n];
+			var corner = this.corners[n].getValue();
 			
 			vectorTest.set(x, y);
 			vectorTest.subCoordinate(base);
